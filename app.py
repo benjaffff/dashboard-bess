@@ -2,16 +2,13 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 
-# Configuración de la página
-st.set_page_config(page_title="Inteligencia de Mercado BESS", layout="wide", page_icon="📈")
+st.set_page_config(page_title="Inteligencia Comercial BESS", layout="wide", page_icon="💰")
 
-# Función para cargar y procesar los datos
 @st.cache_data
 def load_data():
     try:
         df = pd.read_excel("BESS_Normalizado_Local.xlsx")
         
-        # Categorizar por los rangos de mercado
         def asignar_rango(cap):
             if pd.isna(cap): return "Sin dato"
             elif cap < 50: return "< 50 kWh"
@@ -22,10 +19,8 @@ def load_data():
             else: return "> 500 kWh"
                 
         df['Rango_Capacidad'] = df['Capacidad_kWh'].apply(asignar_rango)
-        
-        # Calcular métricas clave para análisis
         df['Costo_USD_kWh'] = df['Precio_USD_Final_Estimado'] / df['Capacidad_kWh']
-        df['Tasa_C'] = df['Potencia_kW'] / df['Capacidad_kWh'] # Relación Potencia/Energía
+        df['Tasa_C'] = df['Potencia_kW'] / df['Capacidad_kWh']
         
         return df
     except FileNotFoundError:
@@ -35,111 +30,102 @@ def load_data():
 df = load_data()
 
 if not df.empty:
-    # --- Barra de Navegación Lateral ---
-    st.sidebar.title("Navegación Comercial")
-    opcion = st.sidebar.radio("Módulos:", [
-        "📊 Estudio de Mercado por Rango", 
-        "📋 Base de Datos General", 
-        "🧮 Calculadora de Estimación"
+    st.sidebar.title("Módulos Comerciales")
+    opcion = st.sidebar.radio("Ir a:", [
+        "📊 Análisis Financiero y Competencia", 
+        "📋 Catálogo General", 
+        "💰 Simulador de Márgenes (Ventas)"
     ])
 
     orden_rangos = ["< 50 kWh", "50–100 kWh", "100–200 kWh", "200–300 kWh", "300–500 kWh", "> 500 kWh"]
 
-    # --- Pestaña 1: Estudio de Mercado (Principal) ---
-    if opcion == "📊 Estudio de Mercado por Rango":
-        st.title("Análisis Competitivo BESS por Segmento")
-        st.markdown("Selecciona un nicho de mercado para analizar el comportamiento de precios, competidores y especificaciones técnicas de la industria.")
+    # --- Pestaña 1: Análisis Financiero ---
+    if opcion == "📊 Análisis Financiero y Competencia":
+        st.title("Análisis Financiero de la Competencia")
+        st.markdown("Evalúa cómo se comportan los precios del mercado para detectar oportunidades de venta.")
         
-        # Selector de Rango
-        rango_seleccionado = st.selectbox("Selecciona el nicho de capacidad a analizar:", orden_rangos, index=1)
-        
-        # Filtrar datos por el rango seleccionado
+        rango_seleccionado = st.selectbox("Selecciona el nicho a analizar:", orden_rangos, index=1)
         df_nicho = df[df['Rango_Capacidad'] == rango_seleccionado].copy()
         
-        if df_nicho.empty:
-            st.warning("No hay datos suficientes para este rango de capacidad.")
-        else:
-            # Cálculos de mercado para el nicho
-            precio_min = df_nicho['Precio_USD_Final_Estimado'].min()
-            precio_max = df_nicho['Precio_USD_Final_Estimado'].max()
-            promedio_kwh = df_nicho['Costo_USD_kWh'].mean()
+        if not df_nicho.empty:
+            st.subheader("Tendencias de Precio vs. Capacidad")
             
-            st.subheader(f"Resumen de Mercado: {rango_seleccionado}")
+            col_graf1, col_graf2 = st.columns(2)
             
-            # Tarjetas de Precios
-            col1, col2, col3, col4 = st.columns(4)
-            col1.metric("Equipos en este Nicho", len(df_nicho))
-            col2.metric("Precio Base (Mínimo)", f"${precio_min:,.0f} USD")
-            col3.metric("Precio Tope (Máximo)", f"${precio_max:,.0f} USD")
-            col4.metric("Promedio Competitivo", f"${promedio_kwh:,.0f} USD / kWh")
-            
-            st.divider()
-            
-            # Gráficos de Análisis Comercial
-            st.subheader("Inteligencia Competitiva")
-            g_col1, g_col2 = st.columns(2)
-            
-            with g_col1:
-                # 1. Posicionamiento de Marcas (Precio)
-                df_marcas = df_nicho.groupby('Marca')['Costo_USD_kWh'].mean().reset_index().sort_values('Costo_USD_kWh')
-                fig1 = px.bar(df_marcas, x='Costo_USD_kWh', y='Marca', orientation='h',
-                              title="Posicionamiento de Precio por Marca (USD/kWh)",
-                              labels={'Costo_USD_kWh': 'USD / kWh'}, color='Costo_USD_kWh', color_continuous_scale='Viridis')
-                st.plotly_chart(fig1, use_container_width=True)
+            with col_graf1:
+                # Gráfico 1: Relación Directa (Precio Total vs Capacidad) con línea de tendencia
+                fig_total = px.scatter(
+                    df_nicho, x='Capacidad_kWh', y='Precio_USD_Final_Estimado', 
+                    color='Marca', hover_name='Modelo', trendline="ols",
+                    title="Relación: Capacidad (kWh) vs Precio Total (USD)",
+                    labels={'Capacidad_kWh': 'Capacidad (kWh)', 'Precio_USD_Final_Estimado': 'Precio Total Estimado (USD)'}
+                )
+                st.plotly_chart(fig_total, use_container_width=True)
                 
-            with g_col2:
-                # 2. Análisis de Dispersión (Qué se está vendiendo exactamente)
-                fig2 = px.scatter(df_nicho, x='Capacidad_kWh', y='Precio_USD_Final_Estimado',
-                                  color='Origen', size='Capacidad_kWh', hover_name='Modelo',
-                                  title="Dispersión de Oferta: Capacidad vs Precio Total",
-                                  labels={'Capacidad_kWh': 'Capacidad (kWh)', 'Precio_USD_Final_Estimado': 'Precio Total (USD)'})
-                st.plotly_chart(fig2, use_container_width=True)
+            with col_graf2:
+                # Gráfico 2: Economía de Escala (Costo por kWh vs Capacidad)
+                fig_kwh = px.scatter(
+                    df_nicho, x='Capacidad_kWh', y='Costo_USD_kWh', 
+                    color='Origen', size='Potencia_kW', hover_name='Marca', trendline="lowess",
+                    title="Economía de Escala: Costo Unitario (USD/kWh) vs Capacidad",
+                    labels={'Capacidad_kWh': 'Capacidad (kWh)', 'Costo_USD_kWh': 'Costo Unitario (USD / kWh)'}
+                )
+                st.plotly_chart(fig_kwh, use_container_width=True)
 
-            # Gráfico adicional: Análisis Técnico de Potencia
-            if df_nicho['Tasa_C'].notna().any():
-                st.subheader("Perfil Técnico del Segmento (Orientación a Potencia vs Energía)")
-                fig3 = px.box(df_nicho, x='Origen', y='Tasa_C', points="all", hover_name='Marca',
-                              title="Distribución de la Tasa C (Potencia kW / Capacidad kWh) por Origen",
-                              labels={'Tasa_C': 'Ratio Potencia/Capacidad (C-Rate)'})
-                st.plotly_chart(fig3, use_container_width=True)
-
-            # Tabla de datos ordenada por precio para el segmento
-            st.subheader("Catálogo de Competidores en el Nicho")
-            columnas_nicho = ['Marca', 'Modelo', 'Capacidad_kWh', 'Potencia_kW', 'Precio_USD_Final_Estimado', 'Costo_USD_kWh', 'Origen', 'Garantia']
-            cols_disponibles = [c for c in columnas_nicho if c in df_nicho.columns]
+            st.divider()
+            st.subheader("Ranking de Competidores (Costo por kWh)")
             
-            # Ordenar de más barato a más caro por kWh
-            st.dataframe(df_nicho[cols_disponibles].sort_values('Costo_USD_kWh'), use_container_width=True)
+            # Gráfico de barras ordenado
+            df_marcas = df_nicho.groupby('Marca')['Costo_USD_kWh'].mean().reset_index().sort_values('Costo_USD_kWh')
+            fig_bar = px.bar(
+                df_marcas, x='Costo_USD_kWh', y='Marca', orientation='h',
+                title="¿Quién vende más caro/barato en este segmento?",
+                color='Costo_USD_kWh', color_continuous_scale='RdYlGn_r', text_auto='.0f'
+            )
+            st.plotly_chart(fig_bar, use_container_width=True)
 
     # --- Pestaña 2: Base de Datos General ---
-    elif opcion == "📋 Base de Datos General":
-        st.title("Explorador de Base de Datos Completa")
-        st.markdown("Revisa el catálogo consolidado de todos los segmentos y orígenes.")
-        
+    elif opcion == "📋 Catálogo General":
+        st.title("Base de Datos Completa")
         filtro_rango = st.multiselect("Filtrar por Rango:", options=orden_rangos, default=orden_rangos)
         df_filtro = df[df['Rango_Capacidad'].isin(filtro_rango)]
-        
-        columnas_mostrar = ['Rango_Capacidad', 'Marca', 'Modelo', 'Capacidad_kWh', 'Potencia_kW', 'Quimica', 'Precio_Local', 'Moneda_Local', 'Precio_USD_Final_Estimado', 'Proveedor', 'Origen', 'Link']
-        st.dataframe(df_filtro[[c for c in columnas_mostrar if c in df_filtro.columns]], use_container_width=True)
+        columnas_mostrar = ['Rango_Capacidad', 'Marca', 'Modelo', 'Capacidad_kWh', 'Precio_USD_Final_Estimado', 'Costo_USD_kWh', 'Origen']
+        st.dataframe(df_filtro[[c for c in columnas_mostrar if c in df_filtro.columns]].sort_values('Costo_USD_kWh'), use_container_width=True)
 
-    # --- Pestaña 3: Calculadora ---
-    elif opcion == "🧮 Calculadora de Estimación":
-        st.title("Calculadora de Costos (Dimensionamiento)")
-        st.markdown("Estima costos de hardware base para tus proyectos basándote en el mercado.")
+    # --- Pestaña 3: Simulador de Márgenes ---
+    elif opcion == "💰 Simulador de Márgenes (Ventas)":
+        st.title("Simulador de Rentabilidad Comercial")
+        st.markdown("Calcula tu precio de venta final aplicando tu margen de ganancia sobre el costo promedio de la industria.")
         
-        promedio_global = df[(df['Costo_USD_kWh'] > 50) & (df['Costo_USD_kWh'] < 2000)]['Costo_USD_kWh'].mean()
+        # Filtramos valores extremos para tener un costo base realista
+        df_realista = df[(df['Costo_USD_kWh'] > 50) & (df['Costo_USD_kWh'] < 1500)]
+        costo_base_kwh = df_realista['Costo_USD_kWh'].mean()
         
-        col1, col2 = st.columns(2)
-        with col1:
-            cap_input = st.number_input("Capacidad Requerida para el Proyecto (kWh):", min_value=1.0, value=200.0, step=10.0)
-            tc_input = st.number_input("Tipo de Cambio (CLP/USD):", min_value=100, value=930, step=10)
+        st.info(f"**Costo Proveedor Estimado (Mercado Base):** ${costo_base_kwh:,.2f} USD por kWh")
+        
+        col_calc1, col_calc2 = st.columns(2)
+        
+        with col_calc1:
+            st.subheader("Tus Parámetros")
+            cap_input = st.number_input("Capacidad del Equipo a Vender (kWh):", min_value=1.0, value=100.0, step=10.0)
+            margen_input = st.slider("Margen de Ganancia Esperado (%):", min_value=5, max_value=100, value=30, step=5)
+            tc_input = st.number_input("Tipo de Cambio (CLP/USD):", min_value=500, value=930, step=10)
             
-        with col2:
-            st.info(f"**Costo Promedio del Mercado:** ${promedio_global:,.2f} USD/kWh")
-            total_usd = cap_input * promedio_global
-            total_clp = total_usd * tc_input
+        with col_calc2:
+            st.subheader("Proyección Financiera")
             
-            st.success(f"**Presupuesto Base Estimado (USD):** ${total_usd:,.2f}")
-            st.success(f"**Presupuesto Base Estimado (CLP):** ${total_clp:,.0f}")
+            # Cálculos
+            costo_compra_usd = cap_input * costo_base_kwh
+            precio_venta_usd = costo_compra_usd * (1 + (margen_input / 100))
+            ganancia_neta_usd = precio_venta_usd - costo_compra_usd
             
-        st.caption("Los costos corresponden exclusivamente a hardware base. Integraciones complejas, inversores externos PCS o interfaces de comunicación avanzadas deben presupuestarse por separado.")
+            precio_venta_clp = precio_venta_usd * tc_input
+            ganancia_neta_clp = ganancia_neta_usd * tc_input
+            
+            st.warning(f"**Costo de Adquisición (USD):** ${costo_compra_usd:,.2f}")
+            st.success(f"**Precio de Venta Sugerido (USD):** ${precio_venta_usd:,.2f}")
+            st.metric(label="Tu Ganancia Neta (USD)", value=f"${ganancia_neta_usd:,.2f}")
+            
+            st.divider()
+            st.success(f"**Precio de Venta Sugerido (CLP):** ${precio_venta_clp:,.0f}")
+            st.metric(label="Tu Ganancia Neta (CLP)", value=f"${ganancia_neta_clp:,.0f}")
