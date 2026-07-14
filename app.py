@@ -30,7 +30,6 @@ def load_data():
         df['Quimica'] = df['Quimica'].fillna('No Especificada')
         df['Proveedor'] = df['Proveedor'].fillna('Venta Directa')
         df['Origen'] = df['Origen'].fillna('Desconocido')
-        df['Certificaciones'] = df['Certificaciones'].fillna('No Especificada')
         
         # --- NUEVAS COLUMNAS PARA SEGMENTACIÓN ---
         # 1. Segmentar Mercado
@@ -41,21 +40,13 @@ def load_data():
             
         # 2. Segmentar Inversor
         def tiene_inversor(potencia):
+            # Si no hay dato de potencia o es 0, asumimos que es solo el rack de baterías
             if pd.isna(potencia) or potencia <= 0:
                 return 'SIN INVERSOR'
             else:
                 return 'CON INVERSOR'
                 
         df['Tipo_Inversor'] = df['Potencia_kW'].apply(tiene_inversor)
-
-        # 3. Segmentar Certificación
-        def tiene_certificacion(cert):
-            if str(cert).strip().upper() == 'NO ESPECIFICADA' or pd.isna(cert):
-                return 'NO ESPECIFICADA'
-            else:
-                return 'CON CERTIFICACIÓN'
-                
-        df['Estado_Certificacion'] = df['Certificaciones'].apply(tiene_certificacion)
         
         return df
     except FileNotFoundError:
@@ -69,7 +60,6 @@ if not df.empty:
     st.sidebar.title("Filtros Globales")
     filtro_mercado = st.sidebar.selectbox("Mercado:", ["TODOS", "CHILE", "INTERNACIONAL"])
     filtro_inversor = st.sidebar.selectbox("Tipo de Sistema:", ["TODOS", "CON INVERSOR", "SIN INVERSOR"])
-    filtro_cert = st.sidebar.selectbox("Certificaciones:", ["TODOS", "CON CERTIFICACIÓN", "NO ESPECIFICADA"])
     
     # Aplicar Filtros Globales al DataFrame
     if filtro_mercado != "TODOS":
@@ -77,14 +67,12 @@ if not df.empty:
         
     if filtro_inversor != "TODOS":
         df = df[df['Tipo_Inversor'] == filtro_inversor]
-
-    if filtro_cert != "TODOS":
-        df = df[df['Estado_Certificacion'] == filtro_cert]
         
     st.sidebar.divider()
 
+    # Verificar si el DataFrame quedó vacío tras aplicar los filtros
     if df.empty:
-        st.warning("⚠️ No hay equipos que cumplan con la combinación de filtros seleccionada. Intenta ajustar los parámetros en la barra lateral.")
+        st.warning("⚠️ No hay equipos que cumplan con la combinación de filtros seleccionada. Intenta ajustar el Mercado o el Tipo de Sistema en la barra lateral.")
     else:
         # --- 2. Barra Lateral de Navegación ---
         st.sidebar.title("Módulos Comerciales")
@@ -192,8 +180,7 @@ if not df.empty:
                     st.plotly_chart(fig_prov, use_container_width=True)
 
                 st.subheader(f"Equipos Analizados en {rango_seleccionado}")
-                # Se agregó 'Certificaciones' a las columnas a mostrar
-                columnas_nicho = ['Marca', 'Modelo', 'Capacidad_kWh', 'Potencia_kW', 'Quimica', 'Precio_USD_Final_Estimado', 'Costo_USD_kWh', 'Proveedor', 'Origen', 'Certificaciones']
+                columnas_nicho = ['Marca', 'Modelo', 'Capacidad_kWh', 'Potencia_kW', 'Quimica', 'Precio_USD_Final_Estimado', 'Costo_USD_kWh', 'Proveedor', 'Origen']
                 st.dataframe(df_nicho[[c for c in columnas_nicho if c in df_nicho.columns]].sort_values('Costo_USD_kWh'), use_container_width=True)
             else:
                 st.warning("No hay equipos registrados en el mercado para este segmento de capacidad.")
@@ -203,8 +190,7 @@ if not df.empty:
             st.title("Base de Datos Maestra")
             filtro_rango = st.multiselect("Filtrar por Rango:", options=orden_rangos, default=orden_rangos)
             df_filtro = df[df['Rango_Capacidad'].isin(filtro_rango)]
-            # Se agregó 'Certificaciones' a las columnas a mostrar
-            columnas_mostrar = ['Rango_Capacidad', 'Marca', 'Modelo', 'Capacidad_kWh', 'Potencia_kW', 'Quimica', 'Precio_Local', 'Moneda_Local', 'Precio_USD_Final_Estimado', 'Costo_USD_kWh', 'Proveedor', 'Origen', 'Garantia', 'Certificaciones', 'Link']
+            columnas_mostrar = ['Rango_Capacidad', 'Marca', 'Modelo', 'Capacidad_kWh', 'Potencia_kW', 'Quimica', 'Precio_Local', 'Moneda_Local', 'Precio_USD_Final_Estimado', 'Costo_USD_kWh', 'Proveedor', 'Origen', 'Garantia', 'Link']
             st.dataframe(df_filtro[[c for c in columnas_mostrar if c in df_filtro.columns]].sort_values('Capacidad_kWh'), use_container_width=True)
 
         # --- Pestaña 3: Calculadora de Costos y Rentabilidad ---
@@ -230,6 +216,7 @@ if not df.empty:
                 
                 st.divider()
                 
+                # --- OPCIÓN PARA SACAR / MOSTRAR LO DEL MARGEN ---
                 aplicar_margen = st.checkbox("Activar modo vendedor (Calcular margen de ganancia comercial)", value=False)
                 
                 if aplicar_margen:
@@ -240,12 +227,14 @@ if not df.empty:
             with col_calc2:
                 st.subheader("Resultados Financieros")
                 
+                # Cálculo de Costo Base
                 costo_compra_usd = cap_input * costo_base_kwh
                 costo_compra_clp = costo_compra_usd * tc_input
                 
                 st.warning(f"**Costo de Adquisición / Estimado (USD):** ${costo_compra_usd:,.2f}")
                 st.warning(f"**Costo de Adquisición / Estimado (CLP):** ${costo_compra_clp:,.0f}")
                 
+                # Cálculo de Venta (Solo si el checkbox está activo)
                 if aplicar_margen:
                     st.divider()
                     precio_venta_usd = costo_compra_usd * (1 + (margen_input / 100))
